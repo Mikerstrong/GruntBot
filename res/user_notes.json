@@ -1,6 +1,28 @@
 {
   "miker2515": {
     "text": "I make the admins angry because I make the Horde too much money.",
-    "category": "gold"
+    "category": "gold",
+    "history": [
+      {
+        "text": "Grunt I'm tired because I work 12 hour shifts",
+        "category": "sleep"
+      },
+      {
+        "text": "I must be overworked grunt to be this tired",
+        "category": "sleep"
+      },
+      {
+        "text": "Grunt what's happening",
+        "category": null
+      },
+      {
+        "text": "What do you think grunt, make some gold today",
+        "category": "gold"
+      },
+      {
+        "text": "What do you think grunt, lets make some gold today",
+        "category": "gold"
+      }
+    ]
   }
 }
