@@ -44,6 +44,24 @@ class GruntBot(discord.Client):
                 return category
         return None
 
+    # Assign titles based on doubled word count thresholds
+    def get_wow_title(self, username):
+        word_count = self.user_data.get(username, {}).get("word_count", 0)
+        titles = [
+            (20000, "Warchief"),
+            (10000, "Champion"),
+            (4000, "Veteran"),
+            (2000, "Grunt"),
+            (1000, "Scout"),
+            (200, "Peon"),
+            (0, "Newcomer"),
+        ]
+        for threshold, title in titles:
+            if word_count >= threshold:
+                return f"{title} ({word_count} words spoken)"
+        return "Newcomer (0 words spoken)"
+
+    # Only add notes/history here, word counting is global in on_message
     def learn_from_user(self, username, message_content):
         category = self.categorize_note(message_content)
         new_note = {
@@ -91,65 +109,21 @@ class GruntBot(discord.Client):
                     drifted.append(k)
         return drifted if drifted else None
 
-    def get_time_flavor(self):
-        hour = datetime.now().hour
-        if 5 <= hour < 12:
-            return "morning"
-        elif 12 <= hour < 17:
-            return "afternoon"
-        elif 17 <= hour < 22:
-            return "evening"
-        else:
-            return "late_night"
-
     def inflect_response(self, response, username):
-        traits = self.get_user_traits(username)
-        flavor = self.get_time_flavor()
         drift  = self.detect_personality_shift(username)
 
-        # Subtle tone prefixes
-        if flavor == "morning":
-            tone = random.choice([
-                "Fresh steel hums",
-                "A sharp breath before battle",
-                "Quiet sunrise strength"
-            ])
-        elif flavor == "afternoon":
-            tone = random.choice([
-                "Hammer rings steady",
-                "Midday focus sharpens",
-                "GruntBot hums with purpose"
-            ])
-        elif flavor == "evening":
-            tone = random.choice([
-                "Twilight shadows gather",
-                "Echoes of a long day",
-                "Strength softens with dusk"
-            ])
-        else:  # late_night
-            tone = random.choice([
-                "Whispers by the forge",
-                "Silent paths under moonlight",
-                "Dreams sharpen the blade"
-            ])
+        # Only sometimes add a generic flavor (30% chance) - REMOVE FLAVORS
+        prefix_parts = []
 
-        # Subtle personality hints
-        if traits.get("gold", 0) >= 0.5:
-            persona = "You seem to seek glory in the glitter..."
-        elif traits.get("food", 0) >= 0.5:
-            persona = "Your hunger stirs even legends."
-        elif traits.get("sleep", 0) >= 0.5:
-            persona = "The quiet pull of slumber follows your words."
-        else:
-            persona = ""
+        # No generic or time-based flavors
+
+        # No personality hints
 
         # Occasional drift hint
-        drift_hint = ""
         if drift and random.random() < 0.3:
-            drift_hint = f"GruntBot senses a quiet shift... more {', '.join(drift)} lately."
+            prefix_parts.append(f"GruntBot senses a quiet shift... more {', '.join(drift)} lately.")
 
-        # Assemble
-        prefix = " ".join(filter(None, [tone, persona, drift_hint]))
+        prefix = " ".join(prefix_parts)
         return f"{prefix} {response}" if prefix else response
 
     async def on_ready(self):
@@ -174,16 +148,32 @@ class GruntBot(discord.Client):
         msg_lower = message.content.lower()
         username  = str(message.author.name)
 
+        # --- Count words for every message ---
+        words = len(message.content.split())
+        self.user_data.setdefault(username, {}).setdefault("history", [])
+        self.user_data[username]["word_count"] = self.user_data[username].get("word_count", 0) + words
+        self.save_user_data()
+        # -------------------------------------
+
+        # Title
+        if msg_lower.strip() == "grunt title":
+            title = self.get_wow_title(username)
+            await message.channel.send(f"{message.author.mention}, your title: **{title}**")
+            return
+
         # Help
         if msg_lower.strip() == "grunt help":
             help_text = (
                 "**🪓 GruntBot Command Guide 🪓**\n\n"
                 "`grunt` — Get a random grunt.\n"
                 "`grunt <message>` — Talk to GruntBot.\n"
-                "`train grunt: <phrase>` — Teach GruntBot.\n"
-                "`list grunts` — See learned grunts.\n"
-                "`grunt note: <fact>` — Share something personal.\n"
-                "`grunt help` — You just did.\n"
+                "`train grunt: <phrase>` — Teach GruntBot a new grunt.\n"
+                "`list grunts` — See all learned grunts.\n"
+                "`grunt note: <fact>` — Share something personal with GruntBot.\n"
+                "`grunt title` — See your WoW-style rank based on all your words spoken.\n"
+                "`grunt help` — Show this help message.\n\n"
+                "🪙 **Ranks:** GruntBot tracks every word you say and assigns you a World of Warcraft–style title. "
+                "Type `grunt title` to see your current rank!"
             )
             await message.channel.send(help_text)
             return
