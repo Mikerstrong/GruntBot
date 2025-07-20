@@ -11,10 +11,24 @@ from chats import chats
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
+# Always use absolute paths based on the script location
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+RES_DIR = os.path.join(BASE_DIR, '..', 'res')
+USER_NOTES_PATH = os.path.join(RES_DIR, 'user_notes.json')
+GRUNTS_PATH = os.path.join(RES_DIR, 'grunts.txt')
+GREETINGS_PATH = os.path.join(RES_DIR, 'greetings.txt')
+
 class GruntBot(discord.Client):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.user_notes_path = './res/user_notes.json'
+        os.makedirs(RES_DIR, exist_ok=True)
+        # Ensure grunts.txt exists
+        if not os.path.exists(GRUNTS_PATH):
+            with open(GRUNTS_PATH, 'w') as f:
+                f.write("Me grunt!\n")
+        self.user_notes_path = USER_NOTES_PATH
+        self.grunts_path = GRUNTS_PATH
+        self.greetings_path = GREETINGS_PATH
         self.user_data = self.load_user_data()
         self.keyword_map = {
             "food": ["pie", "snack", "eat", "hungry", "food"],
@@ -35,7 +49,7 @@ class GruntBot(discord.Client):
         return {}
 
     def save_user_data(self):
-        os.makedirs(os.path.dirname(self.user_notes_path), exist_ok=True)  # Ensure ./res exists
+        os.makedirs(os.path.dirname(self.user_notes_path), exist_ok=True)
         with open(self.user_notes_path, 'w') as file:
             json.dump(self.user_data, file, indent=2)
 
@@ -45,7 +59,6 @@ class GruntBot(discord.Client):
                 return category
         return None
 
-    # Assign titles based on doubled word count thresholds
     def get_wow_title(self, username):
         word_count = self.user_data.get(username, {}).get("word_count", 0)
         titles = [
@@ -62,7 +75,6 @@ class GruntBot(discord.Client):
                 return f"{title} ({word_count} words spoken)"
         return "Newcomer (0 words spoken)"
 
-    # Only add notes/history here, word counting is global in on_message
     def learn_from_user(self, username, message_content):
         category = self.categorize_note(message_content)
         new_note = {
@@ -112,18 +124,9 @@ class GruntBot(discord.Client):
 
     def inflect_response(self, response, username):
         drift  = self.detect_personality_shift(username)
-
-        # Only sometimes add a generic flavor (30% chance) - REMOVE FLAVORS
         prefix_parts = []
-
-        # No generic or time-based flavors
-
-        # No personality hints
-
-        # Occasional drift hint
         if drift and random.random() < 0.3:
             prefix_parts.append(f"GruntBot senses a quiet shift... more {', '.join(drift)} lately.")
-
         prefix = " ".join(prefix_parts)
         return f"{prefix} {response}" if prefix else response
 
@@ -134,7 +137,7 @@ class GruntBot(discord.Client):
     async def on_member_join(self, member):
         if member.guild.system_channel:
             try:
-                with open('./res/greetings.txt') as f:
+                with open(self.greetings_path) as f:
                     greets = [line.strip() for line in f if line.strip()]
                 await member.guild.system_channel.send(
                     f"{member.mention}, {random.choice(greets)}"
@@ -184,7 +187,7 @@ class GruntBot(discord.Client):
             new_grunt = message.content[len("train grunt:"):].strip()
             if new_grunt:
                 try:
-                    with open('./res/grunts.txt', 'a') as f:
+                    with open(self.grunts_path, 'a') as f:
                         f.write(new_grunt + "\n")
                     await message.channel.send(f"GruntBot learns: \"{new_grunt}\" 🧠")
                 except Exception as e:
@@ -209,7 +212,7 @@ class GruntBot(discord.Client):
         # List
         if msg_lower.strip() == "list grunts":
             try:
-                with open('./res/grunts.txt') as f:
+                with open(self.grunts_path) as f:
                     all_grunts = [line.strip() for line in f if line.strip()]
                 if all_grunts:
                     formatted = "\n".join(f"- {g}" for g in all_grunts)
@@ -230,7 +233,7 @@ class GruntBot(discord.Client):
 
                 # Random grunt
                 if not after:
-                    with open('./res/grunts.txt') as f:
+                    with open(self.grunts_path) as f:
                         choices = [line.strip() for line in f if line.strip()]
                     await message.channel.send(random.choice(choices))
                     return
