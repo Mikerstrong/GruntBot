@@ -7,17 +7,17 @@ from datetime import datetime
 from dotenv import load_dotenv
 import sys
 
-from chats import chats
-
-load_dotenv()
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-
 # Always use absolute paths based on the script location, even if run from anywhere
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RES_DIR = os.path.abspath(os.path.join(BASE_DIR, '..', 'res'))
 USER_NOTES_PATH = os.path.join(RES_DIR, 'user_notes.json')
 GRUNTS_PATH = os.path.join(RES_DIR, 'grunts.txt')
 GREETINGS_PATH = os.path.join(RES_DIR, 'greetings.txt')
+
+from chats import chats
+
+load_dotenv()
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
 class GruntBot(discord.Client):
     def __init__(self, *args, **kwargs):
