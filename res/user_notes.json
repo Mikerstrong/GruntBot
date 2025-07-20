@@ -72,8 +72,23 @@
         "text": "Grunt it's raining outside",
         "category": null,
         "timestamp": "2025-07-20T15:27:41.865249"
+      },
+      {
+        "text": "Do you think I'm cool Grunt?",
+        "category": null,
+        "timestamp": "2025-07-20T15:30:20.534476"
+      },
+      {
+        "text": "Grunt am I grool?",
+        "category": null,
+        "timestamp": "2025-07-20T15:30:54.191669"
+      },
+      {
+        "text": "grunt helpl",
+        "category": null,
+        "timestamp": "2025-07-20T16:00:25.819906"
       }
     ],
-    "word_count": 74
+    "word_count": 88
   }
 }

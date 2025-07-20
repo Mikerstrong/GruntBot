@@ -35,6 +35,7 @@ class GruntBot(discord.Client):
         return {}
 
     def save_user_data(self):
+        os.makedirs(os.path.dirname(self.user_notes_path), exist_ok=True)  # Ensure ./res exists
         with open(self.user_notes_path, 'w') as file:
             json.dump(self.user_data, file, indent=2)
 
