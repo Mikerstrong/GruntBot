@@ -7,7 +7,6 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 from chats import chats
-from chat import chatsvc
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -57,47 +56,39 @@ class GruntBot(discord.Client):
 
     def get_user_traits(self, username):
         history = self.user_data.get(username, {}).get("history", [])
-        trait_scores = {key: 0 for key in self.keyword_map.keys()}
-
+        scores = {k: 0 for k in self.keyword_map}
         for note in history:
-            category = note.get("category")
-            if category in trait_scores:
-                trait_scores[category] += 1
-
-        total = sum(trait_scores.values())
+            cat = note.get("category")
+            if cat in scores:
+                scores[cat] += 1
+        total = sum(scores.values())
         if total == 0:
             return {}
-
-        return {
-            key: round(score / total, 2) for key, score in trait_scores.items() if score > 0
-        }
+        return {k: round(v / total, 2) for k, v in scores.items() if v > 0}
 
     def detect_personality_shift(self, username):
         history = self.user_data.get(username, {}).get("history", [])
         if len(history) < 10:
             return None
-
         recent = history[-10:]
-        recent_counts = {key: 0 for key in self.keyword_map.keys()}
-        total_counts = {key: 0 for key in self.keyword_map.keys()}
-
+        total_counts = {k: 0 for k in self.keyword_map}
+        recent_counts = {k: 0 for k in self.keyword_map}
         for note in history:
             cat = note.get("category")
             if cat in total_counts:
                 total_counts[cat] += 1
-
         for note in recent:
             cat = note.get("category")
             if cat in recent_counts:
                 recent_counts[cat] += 1
-
         drifted = []
-        for cat in self.keyword_map.keys():
-            total_pct = total_counts[cat] / len(history)
-            recent_pct = recent_counts[cat] / len(recent)
-            if abs(recent_pct - total_pct) >= 0.3:
-                drifted.append(cat)
-
+        hist_len, rec_len = len(history), len(recent)
+        for k in self.keyword_map:
+            if hist_len and rec_len:
+                total_pct = total_counts[k] / hist_len
+                rec_pct = recent_counts[k] / rec_len
+                if abs(rec_pct - total_pct) >= 0.3:
+                    drifted.append(k)
         return drifted if drifted else None
 
     def get_time_flavor(self):
@@ -114,43 +105,65 @@ class GruntBot(discord.Client):
     def inflect_response(self, response, username):
         traits = self.get_user_traits(username)
         flavor = self.get_time_flavor()
-        drift = self.detect_personality_shift(username)
+        drift  = self.detect_personality_shift(username)
 
-        prefixes = []
-
+        # Subtle tone prefixes
         if flavor == "morning":
-            prefixes.append("Rise and grunt!")
+            tone = random.choice([
+                "Fresh steel hums",
+                "A sharp breath before battle",
+                "Quiet sunrise strength"
+            ])
         elif flavor == "afternoon":
-            prefixes.append("GruntBot thinks your gold pile needs tending.")
+            tone = random.choice([
+                "Hammer rings steady",
+                "Midday focus sharpens",
+                "GruntBot hums with purpose"
+            ])
         elif flavor == "evening":
-            prefixes.append("Evening whispers carry true strength.")
-        elif flavor == "late_night":
-            prefixes.append("Moonlight grunts echo in your soul...")
+            tone = random.choice([
+                "Twilight shadows gather",
+                "Echoes of a long day",
+                "Strength softens with dusk"
+            ])
+        else:  # late_night
+            tone = random.choice([
+                "Whispers by the forge",
+                "Silent paths under moonlight",
+                "Dreams sharpen the blade"
+            ])
 
+        # Subtle personality hints
         if traits.get("gold", 0) >= 0.5:
-            prefixes.append("You sound like a mighty merchant today.")
+            persona = "You seem to seek glory in the glitter..."
         elif traits.get("food", 0) >= 0.5:
-            prefixes.append("Speak quick — before you wander off in search of feast.")
+            persona = "Your hunger stirs even legends."
         elif traits.get("sleep", 0) >= 0.5:
-            prefixes.append("Another dreamy whisper from the shadows...")
+            persona = "The quiet pull of slumber follows your words."
+        else:
+            persona = ""
 
-        if drift:
-            prefixes.append("GruntBot senses change... More " + ", ".join(drift) + " lately.")
+        # Occasional drift hint
+        drift_hint = ""
+        if drift and random.random() < 0.3:
+            drift_hint = f"GruntBot senses a quiet shift... more {', '.join(drift)} lately."
 
-        return " ".join(prefixes) + " " + response
+        # Assemble
+        prefix = " ".join(filter(None, [tone, persona, drift_hint]))
+        return f"{prefix} {response}" if prefix else response
 
     async def on_ready(self):
         print(f"Logged in as {self.user} (ID: {self.user.id})")
         print("Bot is ready!")
 
     async def on_member_join(self, member):
-        if member.guild.system_channel is not None:
+        if member.guild.system_channel:
             try:
-                with open('./res/greetings.txt') as grunts_file:
-                    contents = grunts_file.readlines()
-                grunts = [line.strip() for line in contents if line.strip()]
-                grunt = random.choice(grunts)
-                await member.guild.system_channel.send(f"{member.mention}, {grunt}")
+                with open('./res/greetings.txt') as f:
+                    greets = [line.strip() for line in f if line.strip()]
+                await member.guild.system_channel.send(
+                    f"{member.mention}, {random.choice(greets)}"
+                )
             except Exception as e:
                 print(f"Greeting error: {e}")
 
@@ -159,8 +172,9 @@ class GruntBot(discord.Client):
             return
 
         msg_lower = message.content.lower()
-        username = str(message.author.name)
+        username  = str(message.author.name)
 
+        # Help
         if msg_lower.strip() == "grunt help":
             help_text = (
                 "**🪓 GruntBot Command Guide 🪓**\n\n"
@@ -174,12 +188,13 @@ class GruntBot(discord.Client):
             await message.channel.send(help_text)
             return
 
+        # Train
         if msg_lower.startswith("train grunt:"):
-            new_grunt = message.content[msg_lower.find("train grunt:") + len("train grunt:"):].strip()
+            new_grunt = message.content[len("train grunt:"):].strip()
             if new_grunt:
                 try:
-                    with open('./res/grunts.txt', 'a') as grunts_file:
-                        grunts_file.write(new_grunt + "\n")
+                    with open('./res/grunts.txt', 'a') as f:
+                        f.write(new_grunt + "\n")
                     await message.channel.send(f"GruntBot learns: \"{new_grunt}\" 🧠")
                 except Exception as e:
                     print(f"Training error: {e}")
@@ -188,56 +203,63 @@ class GruntBot(discord.Client):
                 await message.channel.send("No grunt provided!")
             return
 
+        # Note
         if msg_lower.startswith("grunt note:"):
-            note = message.content[msg_lower.find("grunt note:") + len("grunt note:"):].strip()
+            note = message.content[len("grunt note:"):].strip()
             if note:
                 self.learn_from_user(username, message.content)
-                await message.channel.send(f"{message.author.mention}, fine. GruntBot remembers your nonsense.")
+                await message.channel.send(
+                    f"{message.author.mention}, fine. GruntBot remembers your nonsense."
+                )
             else:
                 await message.channel.send("You no teach me anything.")
             return
 
+        # List
         if msg_lower.strip() == "list grunts":
             try:
-                with open('./res/grunts.txt') as grunts_file:
-                    grunts = [line.strip() for line in grunts_file.readlines() if line.strip()]
-                if grunts:
-                    formatted = "\n".join(f"- {g}" for g in grunts)
+                with open('./res/grunts.txt') as f:
+                    all_grunts = [line.strip() for line in f if line.strip()]
+                if all_grunts:
+                    formatted = "\n".join(f"- {g}" for g in all_grunts)
                     await message.channel.send(f"Here be GruntBot's wisdom:\n{formatted}")
                 else:
                     await message.channel.send("Me forget all grunts 😢")
             except Exception as e:
                 print(f"List error: {e}")
-                await message.channel.send("Me can't find grunts...")
+                await message.channel.send("Me can't find grunts…")
             return
 
-        match = re.search(r'\bgrunt\b', message.content, re.IGNORECASE)
-        if match:
+        # Chat
+        if re.search(r'\bgrunt\b', message.content, re.IGNORECASE):
             try:
-                after_grunt = message.content[match.end():].strip()
+                after = message.content[
+                    re.search(r'\bgrunt\b', message.content, re.IGNORECASE).end():
+                ].strip()
 
-                if after_grunt == "":
-                    with open('./res/grunts.txt') as grunts_file:
-                        grunts = [line.strip() for line in grunts_file.readlines() if line.strip()]
-                    grunt = random.choice(grunts)
-                    await message.channel.send(grunt)
+                # Random grunt
+                if not after:
+                    with open('./res/grunts.txt') as f:
+                        choices = [line.strip() for line in f if line.strip()]
+                    await message.channel.send(random.choice(choices))
                     return
 
-                chat = self.chats.get_chat(username)
-                response = await chat.prompt(after_grunt)
+                # LLM chat
+                chat     = self.chats.get_chat(username)
+                response = await chat.prompt(after)
 
                 self.learn_from_user(username, message.content)
                 response = self.inflect_response(response, username)
-
                 await message.channel.send(response)
 
             except Exception as e:
-                print(f"Grunt response error: {e}")
+                print(f"Response error: {e}")
                 await message.channel.send("Me confused. Come back later.")
+            return
 
 intents = discord.Intents.default()
 intents.message_content = True
 
 client = GruntBot(intents=intents)
-print(f"DISCORD_TOKEN loaded: {DISCORD_TOKEN} | Type: {type(DISCORD_TOKEN)}")
+print(f"DISCORD_TOKEN loaded: {DISCORD_TOKEN}")
 client.run(DISCORD_TOKEN)

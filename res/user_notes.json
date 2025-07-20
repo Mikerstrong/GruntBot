@@ -22,6 +22,16 @@
       {
         "text": "What do you think grunt, lets make some gold today",
         "category": "gold"
+      },
+      {
+        "text": "Grunt, I want gold and Ice cream",
+        "category": "gold",
+        "timestamp": "2025-07-20T04:45:29.344592"
+      },
+      {
+        "text": "Grunt, How often do you go pee",
+        "category": null,
+        "timestamp": "2025-07-20T04:46:12.812880"
       }
     ]
   }
