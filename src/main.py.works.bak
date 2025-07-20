@@ -1,0 +1,81 @@
+import discord
+import random
+import requests
+
+from chats import chats
+from chat import chatsvc
+
+import os
+from dotenv import load_dotenv
+load_dotenv()
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+
+
+class GruntBot(discord.Client):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @property
+    def chats(self):
+        if not hasattr(self, '_chats'):
+            self._chats = chats(timeout=300)  # 5-minute timeout
+        return self._chats
+
+    async def on_ready(self):
+        print(f"Logged in as {self.user} (ID: {self.user.id})")
+        print("Bot is ready!")
+
+    async def on_member_join(self, member):
+        if member.guild.system_channel is not None:
+            try:
+                with open('./res/greetings.txt') as grunts_file:
+                    contents = grunts_file.readlines()
+                grunts = [line.strip() for line in contents if line.strip()]
+                grunt = random.choice(grunts)
+
+                await member.guild.system_channel.send(
+                    f"{member.mention}, {grunt}"
+                )
+
+            except Exception as e:
+                print(f"Greeting error: {e}")
+                return
+
+    async def on_message(self, message):
+        if message.author == self.user:
+            return
+
+        msg_lower = message.content.lower()
+
+        if "grunt" in msg_lower:
+            try:
+                # If the message is simply "grunt"
+                if msg_lower.strip() == "grunt":
+                    with open('./res/grunts.txt') as grunts_file:
+                        contents = grunts_file.readlines()
+                    grunts = [line.strip() for line in contents if line.strip()]
+                    grunt = random.choice(grunts)
+                    await message.channel.send(grunt)
+                    return
+
+                # Get text after first "grunt"
+                grunt_index = msg_lower.find("grunt")
+                after_grunt = message.content[grunt_index + len("grunt"):].strip()
+
+                chat = self.chats.get_chat(message.author.name)
+                response = await chat.prompt(after_grunt or "grunt")
+                await message.channel.send(response)
+
+            except Exception as e:
+                print(f"Error processing grunt message: {e}")
+                await message.channel.send("Me tired, come back later")
+                return
+
+
+intents = discord.Intents.default()
+intents.message_content = True
+
+client = GruntBot(intents=intents)
+print(f"DISCORD_TOKEN loaded: {DISCORD_TOKEN} | Type: {type(DISCORD_TOKEN)}")
+
+client.run(DISCORD_TOKEN)

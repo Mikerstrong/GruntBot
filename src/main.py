@@ -1,0 +1,173 @@
+import discord
+import random
+import json
+import os
+import re
+from dotenv import load_dotenv
+
+from chats import chats
+from chat import chatsvc
+
+load_dotenv()
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+
+class GruntBot(discord.Client):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.user_notes_path = './res/user_notes.json'
+        self.user_data = self.load_user_data()
+        self.keyword_map = {
+            "food": ["pie", "snack", "eat", "hungry", "food"],
+            "gold": ["treasure", "money", "rich", "coins", "gold"],
+            "sleep": ["nap", "tired", "rest", "bed", "sleep"]
+        }
+
+    @property
+    def chats(self):
+        if not hasattr(self, '_chats'):
+            self._chats = chats(timeout=300)
+        return self._chats
+
+    def load_user_data(self):
+        if os.path.exists(self.user_notes_path):
+            with open(self.user_notes_path, 'r') as file:
+                return json.load(file)
+        return {}
+
+    def save_user_data(self):
+        with open(self.user_notes_path, 'w') as file:
+            json.dump(self.user_data, file, indent=2)
+
+    def categorize_note(self, note):
+        for category, keywords in self.keyword_map.items():
+            if any(k in note.lower() for k in keywords):
+                return category
+        return None
+
+    async def on_ready(self):
+        print(f"Logged in as {self.user} (ID: {self.user.id})")
+        print("Bot is ready!")
+
+    async def on_member_join(self, member):
+        if member.guild.system_channel is not None:
+            try:
+                with open('./res/greetings.txt') as grunts_file:
+                    contents = grunts_file.readlines()
+                grunts = [line.strip() for line in contents if line.strip()]
+                grunt = random.choice(grunts)
+                await member.guild.system_channel.send(f"{member.mention}, {grunt}")
+            except Exception as e:
+                print(f"Greeting error: {e}")
+
+    async def on_message(self, message):
+        if message.author == self.user:
+            return
+
+        msg_lower = message.content.lower()
+        username = str(message.author.name)
+
+        # Command: grunt help
+        if msg_lower.strip() == "grunt help":
+            help_text = (
+                "**🪓 GruntBot Command Guide 🪓**\n\n"
+                "`grunt` — Get a random grunt from the archives.\n"
+                "`grunt <message>` — Talk to GruntBot. It replies with warrior wisdom.\n"
+                "`train grunt: <your grunt>` — Teach GruntBot a new grunt phrase.\n"
+                "`list grunts` — See all learned grunts.\n"
+                "`grunt note: <personal fact>` — Tell GruntBot something about yourself.\n"
+                "`grunt help` — You're reading it!\n\n"
+                "_GruntBot may reflect on your personal truths... when the moment feels right._"
+            )
+            await message.channel.send(help_text)
+            return
+
+        # Command: train grunt
+        if msg_lower.startswith("train grunt:"):
+            try:
+                new_grunt = message.content[message.content.lower().find("train grunt:") + len("train grunt:"):].strip()
+                if new_grunt:
+                    with open('./res/grunts.txt', 'a') as grunts_file:
+                        grunts_file.write(new_grunt + "\n")
+                    await message.channel.send(f"GruntBot learns: \"{new_grunt}\" 🧠")
+                else:
+                    await message.channel.send("No grunt provided!")
+            except Exception as e:
+                print(f"Training error: {e}")
+                await message.channel.send("Training failed. Me tired.")
+            return
+
+        # Command: grunt note
+        if msg_lower.startswith("grunt note:"):
+            note = message.content[message.content.lower().find("grunt note:") + len("grunt note:"):].strip()
+            if note:
+                category = self.categorize_note(note)
+                self.user_data[username] = {"text": note, "category": category}
+                self.save_user_data()
+                await message.channel.send(f"{message.author.mention}, fine. GruntBot remembers your nonsense.")
+            else:
+                await message.channel.send("You no teach me anything.")
+            return
+
+        # Command: list grunts
+        if msg_lower.strip() == "list grunts":
+            try:
+                with open('./res/grunts.txt') as grunts_file:
+                    grunts = [line.strip() for line in grunts_file.readlines() if line.strip()]
+                if grunts:
+                    formatted = "\n".join(f"- {g}" for g in grunts)
+                    await message.channel.send(f"Here be GruntBot's wisdom:\n{formatted}")
+                else:
+                    await message.channel.send("Me forget all grunts 😢")
+            except Exception as e:
+                print(f"List error: {e}")
+                await message.channel.send("Me can't find grunts...")
+            return
+
+        # Chat trigger: any variation of "grunt"
+        match = re.search(r'\bgrunt\b', message.content, re.IGNORECASE)
+        if match:
+            try:
+                after_grunt = message.content[match.end():].strip()
+
+                # Random grunt response
+                if after_grunt == "":
+                    with open('./res/grunts.txt') as grunts_file:
+                        grunts = [line.strip() for line in grunts_file.readlines() if line.strip()]
+                    grunt = random.choice(grunts)
+                    await message.channel.send(grunt)
+                    return
+
+                # Chat response from GruntBot's brain
+                chat = self.chats.get_chat(username)
+                response = await chat.prompt(after_grunt)
+
+                # Personalized flavor
+                note_data = self.user_data.get(username)
+                if note_data:
+                    user_note = note_data["text"]
+                    user_category = note_data["category"]
+
+                    for category, keywords in self.keyword_map.items():
+                        if any(k in msg_lower for k in keywords):
+                            if user_category == category:
+                                if category == "food":
+                                    response += f"\nUgh, still talking about snacks? Like that time you said \"{user_note}\"."
+                                elif category == "gold":
+                                    response += f"\nOf course it's gold again. Just like when you bragged \"{user_note}\"."
+                                elif category == "sleep":
+                                    response += f"\nFeeling lazy? That's classic \"{user_note}\" energy."
+                                break
+
+                await message.channel.send(response)
+
+            except Exception as e:
+                print(f"Grunt response error: {e}")
+                await message.channel.send("Me confused. Come back later.")
+
+intents = discord.Intents.default()
+intents.message_content = True
+
+client = GruntBot(intents=intents)
+print(f"DISCORD_TOKEN loaded: {DISCORD_TOKEN} | Type: {type(DISCORD_TOKEN)}")
+
+client.run(DISCORD_TOKEN)
